@@ -66,10 +66,38 @@ therefore this script — ever sees the bytes. Nothing downstream of that
 buffering (this script, `docker logs -f`, Docker's `json-file` driver) can
 recover the time already lost before the byte was written out.
 
-If your image/orchestrator lets you enable a TTY on the game server
-container (`tty: true` in Compose), that's the standard fix for this class
-of problem — though it isn't guaranteed Unreal Engine's logging subsystem
-respects TTY detection the way typical C programs do.
+### Confirmed fix: give the server container a TTY
+
+Adding `tty: true` and `stdin_open: true` to the *Satisfactory server's own*
+Compose service (not this notifier's) fixes it. This has been confirmed in
+practice: on an unpatched container, delays up to **394 seconds** were
+measured; after adding both settings and redeploying, delay dropped to
+**0 seconds**, confirmed across four consecutive join/leave events over a
+longer bake-in period, not just one lucky sample.
+
+```yaml
+services:
+  satisfactory-server:
+    image: ghcr.io/wolveix/satisfactory-server:v1.9.10  # or your image/tag
+    tty: true
+    stdin_open: true
+    # ...rest of your existing config
+```
+
+Both settings are needed — `tty: true` alone attaches a pseudo-terminal to
+stdout (which is what fixes the buffering), but some images also probe
+`stdin_open` as part of deciding they're running interactively.
+
+One cosmetic side effect: warning-level log lines pick up ANSI color codes
+once the game believes it's writing to a color-capable terminal. This
+doesn't affect `satisfactory-notify` — the lines it parses (`LogNet: Login
+request:`, `LogNet: Join succeeded:`, `UNetDriver::RemoveClientConnection`)
+aren't warning-level and come through clean.
+
+If you're running the server through a platform that doesn't expose a TTY
+toggle (e.g. some app-catalog/marketplace deployments), you may need to
+redeploy it as a hand-written Compose service to set this — there's
+normally no other way to add it after the fact.
 
 Each notification includes a `(delay: Ns)` suffix, computed from the game's
 own embedded log timestamp vs. wall-clock time when the script processed
@@ -98,6 +126,15 @@ companion signal, but that hybrid isn't implemented in this script.
 ```sh
 docker compose config --quiet
 ```
+
+## About this project
+
+The core join/leave-detection script started as a simple, homelab-specific
+shell script I wrote by hand. Wrapping it up for public use — Docker
+Compose, `.env`-driven configuration, a named volume for state, this
+README — was straightforward but tedious, so I had
+[Claude Code](https://claude.com/claude-code) do that part. I reviewed and
+tested the result before publishing it.
 
 ## License
 
