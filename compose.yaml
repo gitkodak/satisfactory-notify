@@ -1,0 +1,24 @@
+services:
+  satisfactory-join-notify:
+    image: alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+    container_name: satisfactory-join-notify
+    restart: unless-stopped
+    environment:
+      CONTAINER_NAME: ${CONTAINER_NAME:?Set CONTAINER_NAME in .env}
+      NTFY_URL: ${NTFY_URL:?Set NTFY_URL in .env}
+      NTFY_TITLE: ${NTFY_TITLE:-Satisfactory}
+      NTFY_TOKEN: ${NTFY_TOKEN:-}
+    volumes:
+      # Read-only access to the Docker socket is required to stream logs
+      # from the target container.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./satisfactory-join-notify.sh:/config/satisfactory-join-notify.sh:ro
+      - satisfactory-state:/config/state
+    command: >
+      sh -c "
+        apk add --no-cache docker-cli curl grep coreutils &&
+        exec /config/satisfactory-join-notify.sh
+      "
+
+volumes:
+  satisfactory-state:
